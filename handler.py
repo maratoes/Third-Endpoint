@@ -7,11 +7,34 @@ from vllm import LLM, SamplingParams
 model = None
 
 
+def _configure_cache_dirs() -> None:
+    """Prefer caching to a mounted network volume when available."""
+    volume_root = os.getenv("RUNPOD_VOLUME_PATH", "/runpod-volume")
+    if not os.path.isdir(volume_root):
+        return
+
+    cache_root = os.path.join(volume_root, "cache")
+    hf_home = os.getenv("HF_HOME") or os.path.join(cache_root, "hf")
+    hub_cache = os.getenv("HUGGINGFACE_HUB_CACHE") or os.path.join(hf_home, "hub")
+    vllm_cache = os.getenv("VLLM_CACHE_ROOT") or os.path.join(cache_root, "vllm")
+
+    os.makedirs(hub_cache, exist_ok=True)
+    os.makedirs(vllm_cache, exist_ok=True)
+
+    os.environ.setdefault("HF_HOME", hf_home)
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", hub_cache)
+    os.environ.setdefault("TRANSFORMERS_CACHE", hub_cache)
+    os.environ.setdefault("HF_HUB_CACHE", hub_cache)
+    os.environ.setdefault("VLLM_CACHE_ROOT", vllm_cache)
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+
+
 def initialize_model() -> LLM:
     global model
     if model is not None:
         return model
 
+    _configure_cache_dirs()
     quantization = os.getenv("QUANTIZATION", "").strip().lower()
     llm_kwargs: dict[str, Any] = {
         "model": os.getenv("MODEL_NAME", "Qwen/Qwen3-32B-AWQ"),
@@ -48,5 +71,5 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         return {"error": str(exc), "status": "error"}
 
 
-runpod.serverless.start({"handler": handler})
-
+if __name__ == "__main__":
+    runpod.serverless.start({"handler": handler})

@@ -7,6 +7,7 @@ WORKDIR /app
 COPY handler.py .
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+COPY scripts ./scripts
 
 ENV MODEL_NAME="Qwen/Qwen3-32B-AWQ"
 ENV MAX_MODEL_LEN=8192
