@@ -10,15 +10,17 @@ import runpod
 
 def start_tgi_server() -> None:
     model_id = os.getenv("MODEL_ID", "Qwen/Qwen3-32B-Instruct")
-    cmd = [
+    cmd: list[str] = [
         "text-generation-launcher",
         "--model-id", model_id,
-        "--quantize", os.getenv("QUANTIZE", "awq"),
         "--max-input-length", os.getenv("MAX_INPUT_LENGTH", "4096"),
         "--max-total-tokens", os.getenv("MAX_TOTAL_TOKENS", "8192"),
         "--port", "80",
         "--hostname", "0.0.0.0",
     ]
+    quantize = os.getenv("QUANTIZE", "").strip().lower()
+    if quantize and quantize != "none":
+        cmd.extend(["--quantize", quantize])
     subprocess.Popen(cmd)
 
 
