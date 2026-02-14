@@ -1,17 +1,17 @@
-FROM ghcr.io/huggingface/text-generation-inference:2.0.3
+FROM runpod/pytorch:1.0.3-cu1290-torch291-ubuntu2204
 
-RUN pip install --no-cache-dir runpod==1.6.2 requests
+RUN apt-get update && apt-get install -y git curl && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir vllm==0.15.1 runpod==1.7.0 huggingface-hub pydantic
 
 WORKDIR /app
 COPY handler.py .
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-ENV MODEL_ID="Qwen/Qwen3-32B-AWQ"
-ENV MAX_INPUT_LENGTH=4096
-ENV MAX_TOTAL_TOKENS=8192
-ENV QUANTIZE="awq"
-ENV NUM_SHARD=1
+ENV MODEL_NAME="Qwen/Qwen3-32B-AWQ"
+ENV MAX_MODEL_LEN=8192
+ENV QUANTIZATION="awq"
+ENV TENSOR_PARALLEL_SIZE=1
+ENV GPU_MEMORY_UTILIZATION=0.90
 
-EXPOSE 80
 CMD ["python", "-u", "handler.py"]

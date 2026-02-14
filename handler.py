@@ -1,57 +1,52 @@
 import os
-import subprocess
-import threading
-import time
 from typing import Any, Dict
 
-import requests
 import runpod
+from vllm import LLM, SamplingParams
+
+model = None
 
 
-def start_tgi_server() -> None:
-    model_id = os.getenv("MODEL_ID", "Qwen/Qwen3-32B-Instruct")
-    cmd: list[str] = [
-        "text-generation-launcher",
-        "--model-id", model_id,
-        "--max-input-length", os.getenv("MAX_INPUT_LENGTH", "4096"),
-        "--max-total-tokens", os.getenv("MAX_TOTAL_TOKENS", "8192"),
-        "--port", "80",
-        "--hostname", "0.0.0.0",
-    ]
-    quantize = os.getenv("QUANTIZE", "").strip().lower()
-    if quantize and quantize != "none":
-        cmd.extend(["--quantize", quantize])
-    subprocess.Popen(cmd)
+def initialize_model() -> LLM:
+    global model
+    if model is not None:
+        return model
 
+    quantization = os.getenv("QUANTIZATION", "").strip().lower()
+    llm_kwargs: dict[str, Any] = {
+        "model": os.getenv("MODEL_NAME", "Qwen/Qwen3-32B-AWQ"),
+        "trust_remote_code": True,
+        "max_model_len": int(os.getenv("MAX_MODEL_LEN", "8192")),
+        "tensor_parallel_size": int(os.getenv("TENSOR_PARALLEL_SIZE", "1")),
+        "gpu_memory_utilization": float(os.getenv("GPU_MEMORY_UTILIZATION", "0.90")),
+    }
+    if quantization and quantization != "none":
+        llm_kwargs["quantization"] = quantization
 
-threading.Thread(target=start_tgi_server, daemon=True).start()
-time.sleep(60)
-
-TGI_URL = "http://localhost:80/generate"
+    model = LLM(**llm_kwargs)
+    return model
 
 
 def handler(job: Dict[str, Any]) -> Dict[str, Any]:
     try:
+        if model is None:
+            try:
+                initialize_model()
+            except Exception as exc:  # noqa: BLE001
+                return {"error": f"model_init_failed: {exc}", "status": "error"}
+
         data = job.get("input", {})
-        payload = {
-            "inputs": data.get("prompt", ""),
-            "parameters": {
-                "max_new_tokens": data.get("max_new_tokens", 512),
-                "temperature": data.get("temperature", 0.5),
-                "top_p": data.get("top_p", 0.95),
-                "do_sample": True,
-            },
-        }
-        response = requests.post(TGI_URL, json=payload, timeout=120)
-        response.raise_for_status()
-        result = response.json()
-        if isinstance(result, dict):
-            generated = result.get("generated_text", "")
-        else:
-            generated = result[0].get("generated_text", "")
-        return {"output": generated, "status": "success"}
+        prompt = data.get("prompt", "")
+        sampling = SamplingParams(
+            max_tokens=data.get("max_new_tokens", data.get("max_tokens", 256)),
+            temperature=data.get("temperature", 0.5),
+            top_p=data.get("top_p", 0.95),
+        )
+        outputs = model.generate([prompt], sampling)
+        return {"output": outputs[0].outputs[0].text, "status": "success"}
     except Exception as exc:
         return {"error": str(exc), "status": "error"}
 
 
 runpod.serverless.start({"handler": handler})
+
