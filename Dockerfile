@@ -7,7 +7,7 @@ COPY handler.py .
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-ENV MODEL_ID="Qwen/Qwen3-32B-Instruct"
+ENV MODEL_ID="Qwen/Qwen3-32B-AWQ"
 ENV MAX_INPUT_LENGTH=4096
 ENV MAX_TOTAL_TOKENS=8192
 ENV QUANTIZE="awq"
